@@ -1,3 +1,0 @@
-/home/y.basova/parallelki/task1_sin/build/CMakeFiles/SinSum.dir
-/home/y.basova/parallelki/task1_sin/build/CMakeFiles/edit_cache.dir
-/home/y.basova/parallelki/task1_sin/build/CMakeFiles/rebuild_cache.dir
