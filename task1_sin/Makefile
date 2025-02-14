@@ -5,7 +5,7 @@ OBJ = build/main.o
 EXEC = build/main
 BUILD_DIR = build
 
-FLOAT_TYPE ?= float
+FLOAT_TYPE = float
 
 ifeq ($(FLOAT_TYPE), double)
     CXXFLAGS += -DFLOAT_TYPE=double
