@@ -15,10 +15,10 @@ endif
 
 $(OBJ): $(SRC)
 	mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $(SRC) -o $(OBJ)
 
 $(EXEC): $(OBJ)
-	$(CXX) $< -o $@
+	$(CXX) $(OBJ) -o $(EXEC)
 
 run: $(EXEC)
 	./$(EXEC)
