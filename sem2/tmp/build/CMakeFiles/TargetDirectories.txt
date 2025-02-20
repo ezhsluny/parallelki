@@ -1,0 +1,3 @@
+/home/y.basova/parallelki/sem2/tmp/build/CMakeFiles/hello_openmp.dir
+/home/y.basova/parallelki/sem2/tmp/build/CMakeFiles/edit_cache.dir
+/home/y.basova/parallelki/sem2/tmp/build/CMakeFiles/rebuild_cache.dir

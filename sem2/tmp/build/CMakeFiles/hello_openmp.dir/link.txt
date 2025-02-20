@@ -1,0 +1,1 @@
+g++  -fopenmp -O2 CMakeFiles/hello_openmp.dir/hello_openmp.cpp.o -o bin/hello_openmp 

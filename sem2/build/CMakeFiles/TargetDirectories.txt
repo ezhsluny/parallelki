@@ -1,0 +1,3 @@
+/home/y.basova/parallelki/sem2/build/CMakeFiles/while_true.dir
+/home/y.basova/parallelki/sem2/build/CMakeFiles/edit_cache.dir
+/home/y.basova/parallelki/sem2/build/CMakeFiles/rebuild_cache.dir
