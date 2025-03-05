@@ -1,0 +1,4 @@
+/home/y.basova/parallelki/task2/build/CMakeFiles/matrix_prod.dir
+/home/y.basova/parallelki/task2/build/CMakeFiles/integrate.dir
+/home/y.basova/parallelki/task2/build/CMakeFiles/edit_cache.dir
+/home/y.basova/parallelki/task2/build/CMakeFiles/rebuild_cache.dir
