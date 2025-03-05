@@ -75,7 +75,7 @@ void solving_parallel_for(double* a, double* b, double* x)
 
         do
         {
-            #pragma omp parallel for
+            #pragma omp parallel for schedule(dynamic, 200)
             for (int i = 0; i <= N; i++)
             {
                 double tmp = 0.0;

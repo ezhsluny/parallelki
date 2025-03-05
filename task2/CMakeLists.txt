@@ -9,6 +9,8 @@ find_package(OpenMP REQUIRED)
 
 add_executable(matrix_prod matrix_product.c)
 add_executable(integrate integrate.c)
+add_executable(system_sol system_sol.cpp)
 
 target_link_libraries(matrix_prod PRIVATE OpenMP::OpenMP_C)
 target_link_libraries(integrate PRIVATE OpenMP::OpenMP_C)
+target_link_libraries(system_sol PRIVATE OpenMP::OpenMP_C)
