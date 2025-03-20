@@ -23,7 +23,7 @@ double integrate_omp(double (*func)(double), double a, double b, int n)
             sumloc += func(a + h * (i + 0.5));
 
         #pragma omp atomic
-        sum += sumloc;
+            sum += sumloc;
     }
     sum *= h;
     return sum;
