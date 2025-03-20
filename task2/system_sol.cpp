@@ -10,7 +10,7 @@ using namespace std;
 
 const double EPS = 0.00001;
 const int MAX_ITER = 1000;
-const int N = 200;
+const int N = 400;
 const double T = 0.1;
 
 int continue_iter(double* b, double* x0)
@@ -42,7 +42,7 @@ void solving_parallel(double* a, double* b, double* x)
         int lb = threadid * items_per_thread;
         int ub = (threadid == nthreads - 1) ? (N - 1) : (lb + items_per_thread - 1);
         
-        double *x0 = new double[N];
+        double *x0 = (double*)malloc(N * sizeof(double));
         int iter = 0;
 
         do
@@ -61,7 +61,7 @@ void solving_parallel(double* a, double* b, double* x)
             iter++;
         } while (continue_iter(b, x0) && iter < MAX_ITER);
 
-        delete[] x0;
+        free(x0);
     }
 }
 
@@ -70,12 +70,11 @@ void solving_parallel_for(double* a, double* b, double* x)
 {
     #pragma omp parallel
     {
-        double *x0 = new double[N];
-        int iter = 0;
+        double *x0 = (double*)malloc(N * sizeof(double));
 
-        do
+        #pragma omp parallel for schedule(guided, 4)
+        for (int iteration = 0; iteration < MAX_ITER; iteration++)
         {
-            #pragma omp parallel for schedule(dynamic, 200)
             for (int i = 0; i <= N; i++)
             {
                 double tmp = 0.0;
@@ -84,24 +83,27 @@ void solving_parallel_for(double* a, double* b, double* x)
                     tmp += a[i * N + j] * x[j];
                 }
 
+                #pragma omp critical
+                {
                 x0[i] = tmp - b[i];
                 x[i] -= T * x0[i];
+                }
             }
-            iter++;
-        } while (continue_iter(b, x0) && iter < MAX_ITER);
 
-        delete[] x0;
+            if (!continue_iter(b, x0))
+                iteration = MAX_ITER;
+        }
+
+        free(x0);
     }
 }
 
 
 double run_parallel()
 {
-    double *a, *b, *x;
-
-    a = new double[N*N];
-    b = new double[N];
-    x = new double[N];
+    double *a = (double*)malloc(N * N * sizeof(double));
+    double *b = (double*)malloc(N * sizeof(double));
+    double *x = (double*)malloc(N * sizeof(double));
 
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++)
@@ -118,24 +120,22 @@ double run_parallel()
     solving_parallel(a, b, x);
     t = omp_get_wtime() - t;
 
-    cout << endl << "Solution for x:" << endl;
-    for (int i = 0; i < N; i++)
-        cout << x[i] << " ";
+    // cout << endl << "Solution for x:" << endl;
+    // for (int i = 0; i < N; i++)
+    //     cout << x[i] << " ";
 
-    delete[] a;
-    delete[] b;
-    delete[] x;
+    free(a);
+    free(b);
+    free(x);
 
     return t;
 }
 
 double run_parallel_for()
 {
-    double *a, *b, *x;
-
-    a = new double[N*N];
-    b = new double[N];
-    x = new double[N];
+    double *a = (double*)malloc(N * N * sizeof(double));
+    double *b = (double*)malloc(N * sizeof(double));
+    double *x = (double*)malloc(N * sizeof(double));
 
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++)
@@ -152,13 +152,13 @@ double run_parallel_for()
     solving_parallel_for(a, b, x);
     t = omp_get_wtime() - t;
 
-    cout << endl << "Solution for x:" << endl;
-    for (int i = 0; i < N; i++)
-        cout << x[i] << " ";
+    // cout << endl << "Solution for x:" << endl;
+    // for (int i = 0; i < N; i++)
+    //     cout << x[i] << " ";
 
-    delete[] a;
-    delete[] b;
-    delete[] x;
+    free(a);
+    free(b);
+    free(x);
 
     return t;
 }
@@ -169,8 +169,14 @@ int main(int argc, char **argv)
                  << N << "x" << N  << endl\
                  << "size b = " << N << endl\
                  << "size x = " << N << endl;
-    double tparallel = run_parallel();
-    double tparallel_for = run_parallel_for();
+    
+    omp_set_num_threads(6);
+    double tparallel = 0.0;
+    double tparallel_for = 0.0;
+
+        // tparallel += run_parallel();
+        tparallel_for += run_parallel_for();
+    
 
     cout << endl << "Execution time (parallel): " << tparallel << endl;
     cout << endl << "Execution time (parallel_for): " << tparallel_for << endl;
