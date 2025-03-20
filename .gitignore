@@ -1,1 +1,8 @@
 build
+sem2
+CMakeCache.txt
+CMakeFiles/
+Makefile
+a.out
+cmake_install.cmake
+qwertyuiop.cpp
