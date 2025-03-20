@@ -5,6 +5,10 @@ project(Task2)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED True)
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build (Debug or Release)" FORCE)
+endif()
+
 find_package(OpenMP REQUIRED)
 
 add_executable(matrix_prod matrix_product.c)
