@@ -4,13 +4,13 @@
 #include <cstdlib>
 #include <omp.h>
 #include <inttypes.h>
-
+#include <chrono>
 
 using namespace std;
 
 const double EPS = 0.00001;
 const int MAX_ITER = 1000;
-const int N = 400;
+const int N = 200;
 const double T = 0.1;
 
 int continue_iter(double* b, double* x0)
@@ -18,7 +18,7 @@ int continue_iter(double* b, double* x0)
     double norm_b = 0.0;
     double norm_x0 = 0.0;
 
-    #pragma omp parallel for
+    #pragma omp parallel for reduction(+:norm_b, norm_x0)
     for (int i = 0; i < N; i++)
     {
         norm_b += b[i] * b[i];
@@ -31,9 +31,9 @@ int continue_iter(double* b, double* x0)
     return (norm_x0 / norm_b > EPS);
 }
 
-
 void solving_parallel(double* a, double* b, double* x)
 {
+    double *x0 = (double*)malloc(N * sizeof(double));
     #pragma omp parallel
     {
         int nthreads = omp_get_num_threads();
@@ -41,8 +41,7 @@ void solving_parallel(double* a, double* b, double* x)
         int items_per_thread = N / nthreads;
         int lb = threadid * items_per_thread;
         int ub = (threadid == nthreads - 1) ? (N - 1) : (lb + items_per_thread - 1);
-        
-        double *x0 = (double*)malloc(N * sizeof(double));
+
         int iter = 0;
 
         do
@@ -59,23 +58,22 @@ void solving_parallel(double* a, double* b, double* x)
                 x[i] -= T * x0[i];
             }
             iter++;
+
+            #pragma omp barrier
         } while (continue_iter(b, x0) && iter < MAX_ITER);
-
-        free(x0);
     }
+    free(x0);
 }
-
 
 void solving_parallel_for(double* a, double* b, double* x)
 {
+    double *x0 = (double*)malloc(N * sizeof(double));
     #pragma omp parallel
     {
-        double *x0 = (double*)malloc(N * sizeof(double));
-
-        #pragma omp parallel for schedule(guided, 4)
         for (int iteration = 0; iteration < MAX_ITER; iteration++)
         {
-            for (int i = 0; i <= N; i++)
+            #pragma omp for
+            for (int i = 0; i < N; i++)
             {
                 double tmp = 0.0;
                 for (int j = 0; j < N; j++)
@@ -83,21 +81,16 @@ void solving_parallel_for(double* a, double* b, double* x)
                     tmp += a[i * N + j] * x[j];
                 }
 
-                #pragma omp critical
-                {
                 x0[i] = tmp - b[i];
                 x[i] -= T * x0[i];
-                }
             }
 
             if (!continue_iter(b, x0))
-                iteration = MAX_ITER;
+                break;
         }
-
-        free(x0);
     }
+    free(x0);
 }
-
 
 double run_parallel()
 {
@@ -107,7 +100,7 @@ double run_parallel()
 
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++)
-            a[i * N + j] = (i == j) ? 2.0 : 1.0;    
+            a[i * N + j] = (i == j) ? 2.0 : 1.0;
     }
 
     for (int j = 0; j < N; j++)
@@ -116,19 +109,23 @@ double run_parallel()
         x[j] = 0.0;
     }
 
-    double t = omp_get_wtime();
+    auto t_start = chrono::steady_clock::now();
     solving_parallel(a, b, x);
-    t = omp_get_wtime() - t;
+    auto t_end = chrono::steady_clock::now();
+    chrono::duration<double> exec_time = t_end - t_start;
 
-    // cout << endl << "Solution for x:" << endl;
-    // for (int i = 0; i < N; i++)
-    //     cout << x[i] << " ";
-
+    for (int i = 0; i < N; i++) {
+        if (fabs(x[i] - 1.0) > 1e-2) {
+            cout << "Incorrect solution at x[" << i << "] = " << x[i] << endl;
+            break;
+        }
+    }
+    
     free(a);
     free(b);
     free(x);
 
-    return t;
+    return exec_time.count();
 }
 
 double run_parallel_for()
@@ -139,7 +136,7 @@ double run_parallel_for()
 
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++)
-            a[i * N + j] = (i == j) ? 2.0 : 1.0;    
+            a[i * N + j] = (i == j) ? 2.0 : 1.0;
     }
 
     for (int j = 0; j < N; j++)
@@ -148,19 +145,25 @@ double run_parallel_for()
         x[j] = 0.0;
     }
 
-    double t = omp_get_wtime();
+    auto t_start = chrono::steady_clock::now();
     solving_parallel_for(a, b, x);
-    t = omp_get_wtime() - t;
+    auto t_end = chrono::steady_clock::now();
+    chrono::duration<double> exec_time = t_end - t_start;
 
-    // cout << endl << "Solution for x:" << endl;
-    // for (int i = 0; i < N; i++)
-    //     cout << x[i] << " ";
+    // Check solution (should be close to 1.0 for all x[i])
+    for (int i = 0; i < N; i++) {
+        if (fabs(x[i] - 1.0) > 1e-2) {
+            cout << "Incorrect solution at x[" << i << "] = " << x[i] << endl;
+            break;
+        }
+    }
+    // cout << "Solution check passed (all x[i] ≈ 1.0)" << endl;
 
     free(a);
     free(b);
     free(x);
 
-    return t;
+    return exec_time.count();
 }
 
 int main(int argc, char **argv)
@@ -169,17 +172,19 @@ int main(int argc, char **argv)
                  << N << "x" << N  << endl\
                  << "size b = " << N << endl\
                  << "size x = " << N << endl;
-    
-    omp_set_num_threads(6);
+
+    omp_set_num_threads(2);
     double tparallel = 0.0;
     double tparallel_for = 0.0;
 
-        // tparallel += run_parallel();
+    for (int i = 0; i < 10; i++)
+    {
+        tparallel += run_parallel();
         tparallel_for += run_parallel_for();
-    
+    }
 
-    cout << endl << "Execution time (parallel): " << tparallel << endl;
-    cout << endl << "Execution time (parallel_for): " << tparallel_for << endl;
+    cout << endl << "Execution time (parallel): " << tparallel/10*1000 << " ms" << endl;
+    cout << endl << "Execution time (parallel_for): " << tparallel_for/10*1000 << " ms" << endl;
 
     return 0;
 }
