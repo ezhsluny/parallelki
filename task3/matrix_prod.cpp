@@ -40,7 +40,7 @@ int main()
     int rows = 40'000;
     int cols = 40'000;
 
-    auto t_start = chrono::high_resolution_clock::now();
+    auto t_start = chrono::steady_clock::now();
 
     double* mat = (double*)malloc(sizeof(*mat) * rows * cols);
     double* vec = (double*)malloc(sizeof(*vec) * cols);
@@ -68,7 +68,7 @@ int main()
         thread.join();
     }
 
-    auto t_end = chrono::high_resolution_clock::now();
+    auto t_end = chrono::steady_clock::now();
 
     // for (int i = 0; i < rows; i++)
     // {
