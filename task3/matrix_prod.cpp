@@ -1,16 +1,11 @@
 #include <iostream>
-#include <queue>
-#include <future>
+#include <vector>
 #include <thread>
 #include <chrono>
-#include <cmath>
-#include <functional>
-#include <mutex>
 
 using namespace std;
 
-void initialize_matrix(double *mat, int r, int c)
-{
+void initialize_matrix(vector<double>& mat, int r, int c) {
     for (int i = 0; i < r; i++) {
         for (int j = 0; j < c; j++) {
             mat[i * c + j] = i + j;
@@ -18,71 +13,76 @@ void initialize_matrix(double *mat, int r, int c)
     }
 }
 
-void initialize_vector(double *vec, int n)
-{
-    for (int i = 0; i < n; i++)
-    {
+void initialize_vector(vector<double>& vec, int n) {
+    for (int i = 0; i < n; i++) {
         vec[i] = i;
     }
 }
 
-void matrix_vector_product(double *mat, double *vec, double *res, int rStart, int rEnd, int c)
-{
+void matrix_vector_product(const vector<double>& mat, const vector<double>& vec, 
+                          vector<double>& res, int rStart, int rEnd, int c) {
     for (int i = rStart; i < rEnd; i++) {
         res[i] = 0.0;
-        for (int j = 0; j < c; j++)
+        for (int j = 0; j < c; j++) {
             res[i] += mat[i * c + j] * vec[j];
+        }
     }
 }
 
-int main()
+double run_prod(const int rows, const int cols, const int num_threads)
 {
-    int rows = 40'000;
-    int cols = 40'000;
+    vector<double> mat(rows * cols);
+    vector<double> vec(cols);
+    vector<double> res(rows);
 
-    auto t_start = chrono::steady_clock::now();
-
-    double* mat = (double*)malloc(sizeof(*mat) * rows * cols);
-    double* vec = (double*)malloc(sizeof(*vec) * cols);
-    double* res = (double*)malloc(sizeof(*res) * rows);
-
-    thread matrix_thread_init(initialize_matrix, mat, rows, cols);
-    thread vector_thread_init(initialize_vector, vec, cols);
+    thread matrix_thread_init(initialize_matrix, ref(mat), rows, cols);
+    thread vector_thread_init(initialize_vector, ref(vec), cols);
 
     matrix_thread_init.join();
     vector_thread_init.join();
 
-    int num_threads = 40;
-    vector<thread> threads;
-    int rows_on_thread = rows / num_threads;
+    auto t_start = chrono::steady_clock::now();
 
-    for (int i = 0; i < num_threads; i++)
-    {
-        int rStart = i*rows_on_thread;
-        int rEnd = (i == num_threads - 1) ? rows : rStart + rows_on_thread;
-        threads.emplace_back(matrix_vector_product, mat, vec, res, rStart, rEnd, cols);
+    vector<thread> threads;
+    const int rows_per_thread = rows / num_threads;
+
+    for (int i = 0; i < num_threads; i++) {
+        int rStart = i * rows_per_thread;
+        int rEnd = (i == num_threads - 1) ? rows : rStart + rows_per_thread;
+        threads.emplace_back(matrix_vector_product, cref(mat), cref(vec), ref(res), 
+                        rStart, rEnd, cols);
     }
 
-    for (auto& thread : threads)
-    {
+    for (auto& thread : threads) {
         thread.join();
     }
 
     auto t_end = chrono::steady_clock::now();
+    chrono::duration<double> exec_time = t_end - t_start;
 
-    // for (int i = 0; i < rows; i++)
-    // {
+    return exec_time.count();
+}
+
+int main(int argc, char **argv) 
+{
+    const int num_threads = stoi(argv[1]);
+    const int rows = 40'000;
+    const int cols = 40'000;
+
+    double exec_time = 0.0;
+
+    for (int i = 0; i < 10; i++)
+    {
+        exec_time += run_prod(rows, cols, num_threads);
+    }
+    // Пример вывода результатов (закомментирован)
+    // for (int i = 0; i < rows; i++) {
     //     cout << res[i] << " ";
     // }
     // cout << endl;
 
-    chrono::duration<double> exec_time = t_end - t_start;
-    cout << "Execution time on " << num_threads << " threads: " << exec_time.count();
-    cout << endl;
-
-    free(mat);
-    free(vec);
-    free(res);
+    cout << "Execution time on " << num_threads << " threads: " 
+         << exec_time / 10 << endl;
 
     return 0;
 }

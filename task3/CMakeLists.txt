@@ -1,12 +1,26 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
+project(matrix_vector_product CXX)
 
-project(Task3)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_STANDARD_REQUIRED True)
+add_compile_options(-O3)
 
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build (Debug or Release)" FORCE)
-endif()
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
-add_executable(matrix_prod matrix_prod.cpp)
+add_executable(matrix_prod
+    matrix_prod.cpp
+)
+target_link_libraries(matrix_prod
+    PRIVATE 
+    Threads::Threads
+)
+
+add_executable(app 
+    cl_ser_app.cpp
+)
+target_link_libraries(app 
+    PRIVATE 
+    Threads::Threads
+)
