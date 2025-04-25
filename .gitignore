@@ -6,3 +6,4 @@ Makefile
 a.out
 cmake_install.cmake
 qwertyuiop.cpp
+*.csv
