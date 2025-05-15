@@ -1,11 +1,12 @@
 import pandas as pd
 import math
 
+n = 10000
 
 def check_pow():
     df = pd.read_csv("pow_results.csv")
     correct = 0
-    for i in range(100):
+    for i in range(n):
         arg1 = df['Arg1'][i]
         arg2 = df['Arg2'][i]
         result = df['Result'][i]
@@ -22,12 +23,12 @@ def check_pow():
         else:
             print(f"Ошибка: pow({arg1}, {arg2}) = {result_rounded:.6f}, ожидалось {truth_rounded:.6f}")
 
-    print(f"Correct: {correct}/100")
+    print(f"Correct: {correct}/{n}")
 
 def check_sin():
     df = pd.read_csv("sin_results.csv")
     correct = 0
-    for i in range(100):
+    for i in range(n):
         arg1 = df['Arg1'][i]
         result = df['Result'][i]
 
@@ -43,12 +44,12 @@ def check_sin():
         else:
             print(f"Ошибка: sin({arg1}) = {result_rounded:.6f}, ожидалось {truth_rounded:.6f}")
 
-    print(f"Correct: {correct}/100")
+    print(f"Correct: {correct}/{n}")
 
 def check_sqrt():
     df = pd.read_csv("sqrt_results.csv")
     correct = 0
-    for i in range(100):
+    for i in range(n):
         arg1 = df['Arg1'][i]
         result = df['Result'][i]
 
@@ -64,7 +65,7 @@ def check_sqrt():
         else:
             print(f"Ошибка: sin({arg1}) = {result_rounded:.6f}, ожидалось {truth_rounded:.6f}")
 
-    print(f"Correct: {correct}/100")
+    print(f"Correct: {correct}/{n}")
 
 
 check_pow()

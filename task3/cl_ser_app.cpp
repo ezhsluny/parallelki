@@ -15,12 +15,10 @@
 #define SQRT 1
 #define POW 2
 
-using namespace std;
-
 class TaskServer {
 public:
     using ResultType = double;
-    using TaskFunc = function<ResultType()>;
+    using TaskFunc = std::function<ResultType()>;
 
     struct Task {
         size_t id;
@@ -41,9 +39,9 @@ public:
 
     void start() {
         running = true;
-        server_thread = thread(&TaskServer::process_tasks, this);
+        server_thread = std::thread(&TaskServer::process_tasks, this);
 
-        cout << "server start\n";
+        std::cout << "server start\n";
     }
 
     void stop() {
@@ -53,11 +51,11 @@ public:
             server_thread.join();
         }
 
-        cout << "server stop\n";
+        std::cout << "server stop\n";
     }
 
     size_t add_task(int type, double arg1, double arg2 = 0.0) {
-        lock_guard<mutex> lock(mtx);
+        std::lock_guard<std::mutex> lock(mtx);
         size_t id = next_id++;
         
         TaskFunc func;
@@ -73,7 +71,7 @@ public:
     }
 
     Result get_result(size_t id) {
-        unique_lock<mutex> lock(mtx);
+        std::unique_lock<std::mutex> lock(mtx);
         cv_result.wait(lock, [this, id]() { return results.count(id); });
         Result res = results[id];
         results.erase(id);
@@ -81,12 +79,12 @@ public:
     }
 
 private:
-    queue<Task> tasks;
-    unordered_map<size_t, Result> results;
-    mutex mtx;
-    condition_variable cv;
-    condition_variable cv_result;
-    thread server_thread;
+    std::queue<Task> tasks;
+    std::unordered_map<size_t, Result> results;
+    std::mutex mtx;
+    std::condition_variable cv;
+    std::condition_variable cv_result;
+    std::thread server_thread;
     size_t next_id;
     bool running;
 
@@ -94,21 +92,21 @@ private:
         while (running) {
             Task task;
             {
-                unique_lock<mutex> lock(mtx);
+                std::unique_lock<std::mutex> lock(mtx);
                 cv.wait(lock, [this]() { return !tasks.empty() || !running; });
                 if (!running && tasks.empty()) 
                     break;
                 if (tasks.empty()) 
                     continue;
                 
-                task = move(tasks.front());
+                task = std::move(tasks.front());
                 tasks.pop();
             }
 
             ResultType result = task.func();
 
             {
-                lock_guard<mutex> lock(mtx);
+                std::lock_guard<std::mutex> lock(mtx);
                 results[task.id] = {result, task.type, task.arg1, task.arg2};
             }
             cv_result.notify_all();
@@ -119,16 +117,16 @@ private:
 
 class TaskClient {
 public:
-    TaskClient(TaskServer& server, int type, const string& filename)
+    TaskClient(TaskServer& server, int type, const std::string& filename)
         : server(server), type(type), filename(filename) {}
 
     void run(int count) {
-        ofstream file(filename);
+        std::ofstream file(filename);
         file << "ID,Arg1,Arg2,Result\n";
         
-        random_device rd;
-        mt19937 gen(rd());
-        uniform_real_distribution<> dis(0.1, 10.0);
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> dis(0.1, 10.0);
 
         for (int i = 0; i < count; ++i) {
             double arg1 = dis(gen);
@@ -147,41 +145,41 @@ public:
 private:
     TaskServer& server;
     int type;
-    string filename;
+    std::string filename;
 };
 
 int main() {
     TaskServer server;
 
-    auto server_t_start = chrono::steady_clock::now();
+    auto server_t_start = std::chrono::steady_clock::now();
     server.start();
 
     const int N = 10000;
     
-    auto clients_t_start = chrono::steady_clock::now();
+    auto clients_t_start = std::chrono::steady_clock::now();
 
     TaskClient sin_client(server, SIN, "sin_results.csv");
     TaskClient sqrt_client(server, SQRT, "sqrt_results.csv");
     TaskClient pow_client(server, POW, "pow_results.csv");
 
-    thread t1([&sin_client]() { sin_client.run(N); });
-    thread t2([&sqrt_client]() { sqrt_client.run(N); });
-    thread t3([&pow_client]() { pow_client.run(N); });
+    std::thread t1([&sin_client]() { sin_client.run(N); });
+    std::thread t2([&sqrt_client]() { sqrt_client.run(N); });
+    std::thread t3([&pow_client]() { pow_client.run(N); });
 
     t1.join();
     t2.join();
     t3.join();
 
-    auto clients_t_end = chrono::steady_clock::now();
-    chrono::duration<double> clients_time = clients_t_end - clients_t_start;
+    auto clients_t_end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> clients_time = clients_t_end - clients_t_start;
 
     server.stop();
-    auto server_t_end= chrono::steady_clock::now();
+    auto server_t_end= std::chrono::steady_clock::now();
 
-    chrono::duration<double> server_time = server_t_end - server_t_start;
+    std::chrono::duration<double> server_time = server_t_end - server_t_start;
 
-    cout << "Server time: " << server_time.count()
-         << "\nClient time: " << clients_time.count() << endl;
+    std::cout << "Server time: " << server_time.count()
+         << "\nClient time: " << clients_time.count() << std::endl;
 
     return 0;
 }
