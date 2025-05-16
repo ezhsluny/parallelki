@@ -3,9 +3,8 @@ import time
 import threading
 import queue
 import cv2
-import numpy as np
 from ultralytics import YOLO
-from tqdm import tqdm
+
 
 class VideoProcessor:
     def __init__(self, video_path, output_path):
@@ -31,7 +30,6 @@ class VideoProcessor:
             raise ValueError("Failed to create video writer")
         
         self.model = YOLO('yolov8s-pose.pt')
-        self.lock = threading.Lock()
         
     def __del__(self):
         if hasattr(self, 'cap') and self.cap.isOpened():
@@ -40,7 +38,7 @@ class VideoProcessor:
             self.writer.release()
             
     def process_frame(self, frame):
-        results = self.model(frame)
+        results = self.model.predict(frame, device="cpu")
         annotated_frame = results[0].plot()
 
         return annotated_frame
@@ -59,7 +57,7 @@ class VideoProcessor:
         elapsed_time = time.time() - start_time
 
         return elapsed_time
-        
+    
     def process_multi_thread(self, num_threads):
         if num_threads <= 0:
             raise ValueError("Number of threads must be positive")
@@ -76,7 +74,7 @@ class VideoProcessor:
         def worker():
             while not stop_flag.is_set():
                 try:
-                    frame_idx, frame = input_queue.get(timeout=1)
+                    frame_idx, frame = input_queue.get_nowait()
                     processed_frame = self.process_frame(frame)
                     output_queue.put((frame_idx, processed_frame))
                     input_queue.task_done()
@@ -95,17 +93,16 @@ class VideoProcessor:
 
         try:
             frame_idx = 0
-            while frame_idx < self.frame_count or next_frame_to_write < self.frame_count:
-                # Read frames
-                while frame_idx < self.frame_count and input_queue.qsize() < num_threads * 2:
-                    ret, frame = self.cap.read()
-                    if not ret:
-                        break
+            while frame_idx < self.frame_count:
+                ret, frame = self.cap.read()
+                if ret:
                     input_queue.put((frame_idx, frame))
                     frame_idx += 1
+                else:
+                    frame_idx = self.frame_count  # No more frames to read
 
-                # Process output frames
-                while not output_queue.empty():
+                # Process output frames if any
+                if not output_queue.empty():
                     idx, processed_frame = output_queue.get()
                     frame_buffer[idx] = processed_frame
 
@@ -114,8 +111,6 @@ class VideoProcessor:
                         self.writer.write(frame_buffer[next_frame_to_write])
                         frame_buffer[next_frame_to_write] = None
                         next_frame_to_write += 1
-
-                time.sleep(0.01)
         finally:
             stop_flag.set()
             for t in threads:
