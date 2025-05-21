@@ -2,8 +2,13 @@ build
 sem2
 CMakeCache.txt
 CMakeFiles/
-Makefile
 a.out
 cmake_install.cmake
 qwertyuiop.cpp
 *.csv
+report*
+equations
+equations_gpu
+*.dat
+result.txt
+task2/Makefile
