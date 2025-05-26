@@ -1,158 +1,152 @@
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <iostream>
-#include <iomanip>
 #include <boost/program_options.hpp>
+#include <cmath>
+#include <memory>
+#include <algorithm>
+#include <fstream>
+#include <iomanip>
 #include <chrono>
+#include <openacc.h>
+#include <cstring> // для strdup
 
-int N = 256;
-double EPS = 1.0e-6;
-int ITER_MAX = 1000000;
+void saveMatrixToFile(const double* matrix, int NX, const std::string& filename) {
+    std::ofstream outputFile(filename);
+    if (!outputFile.is_open()) {
+        std::cerr << "Не удалось открыть файл " << filename << " для записи." << std::endl;
+        return;
+    }
 
-void print_matrix(double* matrix, int nx, int ny) {
-    std::cout << "\nMatrix values:\n";
-    for (int i = 0; i < ny; i++) {
-        for (int j = 0; j < nx; j++) {
-            std::cout << std::fixed << std::setprecision(2) 
-                      << std::setw(6) << matrix[i*nx + j] << " ";
+    int fieldWidth = 10;
+
+    for (int i = 0; i < NX; ++i) {
+        for (int j = 0; j < NX; ++j) {
+            outputFile << std::setw(fieldWidth) << std::fixed << std::setprecision(4) << matrix[i * NX + j];
         }
-        std::cout << "\n";
+        outputFile << std::endl;
     }
-    std::cout << std::endl;
+
+    outputFile.close();
 }
 
-void initialize(double* matrix, int nx, int ny) {
-    double corners[4] = {10.0, 20.0, 30.0, 20.0};
-    
-    // Initialize all to 0 on host
-    for (int i = 0; i < (nx + 2) * (ny + 2); i++) {
-        matrix[i] = 0.0;
-    }
-    
-    // Set corner values
-    matrix[(nx + 2) + 1] = corners[0];
-    matrix[(nx + 2) * 2 - 2] = corners[1];
-    matrix[(nx + 2) * (ny + 1) - 2] = corners[2];
-    matrix[(nx + 2) * ny + 1] = corners[3];
-    
-    // Initialize edges
-    for (int i = (nx + 2) + 2, j = 1; i < (nx + 2) * 2 - 2; i++, j++) {
-        double coef = (double)(j) / (nx - 1);
-        matrix[i] = corners[0] * (1.0 - coef) + corners[1] * coef;
-        matrix[(nx + 2) * ny + 1 + j] = corners[3] * (1.0 - coef) + corners[2] * coef;
-    }
+void initialize(std::unique_ptr<double[]> &matrix, int NX) {
+    matrix[0] = 10.0;
+    matrix[NX - 1] = 20.0;
+    matrix[(NX - 1) * NX + (NX - 1)] = 30.0;
+    matrix[(NX - 1) * NX] = 20.0;
 
-    for (int i = (nx + 2) * 2 - 2 + (nx + 2), j = 1; i < (nx + 2) * (ny + 1) - 2; i+=(nx + 2), j++) {
-        double coef = (double)(j) / (ny - 1);
-        matrix[i] = corners[1] * (1.0 - coef) + corners[2] * coef;
-        matrix[i - nx + 1] = corners[0] * (1.0 - coef) + corners[3] * coef;
+    for (size_t i = 1; i < NX - 1; ++i) {
+        matrix[i] = matrix[0] + (i * (matrix[NX - 1] - matrix[0]) / (NX - 1));
+        matrix[i * NX] = matrix[0] + (i * (matrix[(NX - 1) * NX] - matrix[0]) / (NX - 1));
+        matrix[i * NX + (NX - 1)] = matrix[NX - 1] + (i * (matrix[(NX - 1) * NX + (NX - 1)] - matrix[NX - 1]) / (NX - 1));
+        matrix[(NX - 1) * NX + i] = matrix[(NX - 1) * NX] + (i * (matrix[(NX - 1) * NX + (NX - 1)] - matrix[(NX - 1) * NX]) / (NX - 1));
     }
 }
 
-double solve_heat_equation(double* A, double* Anew, int nx, int ny, double eps, int iter_max) {
-    double error = eps + 1.0; // Ensure we enter the loop
+void solve_heat_equation(int NX, double EPS, int ITER_MAX, bool profile_mode) {
+    double error = 1.0;
     int iter = 0;
-    
-    #pragma acc enter data copyin(A[0:(nx+2)*(ny+2)], Anew[0:(nx+2)*(ny+2)])
-    
-    while (error > eps && iter < iter_max) {
-        error = 0.0;
-        
-        // Create device copy of error for reduction
-        #pragma acc data copy(error)
-        {
-            // Compute new values and calculate error in one pass
-            #pragma acc parallel loop collapse(2) present(A, Anew) reduction(max:error)
-            for (int i = 1; i <= ny; i++) {
-                for (int j = 1; j <= nx; j++) {
-                    Anew[i*(nx + 2) + j] = 0.25 * (A[i*(nx + 2) + j-1] + A[i*(nx + 2) + j+1] + 
-                                             A[(i-1)*(nx + 2) + j] + A[(i+1)*(nx + 2) + j]);
-                    error = fmax(error, fabs(Anew[i*(nx + 2) + j] - A[i*(nx + 2) + j]));
+
+    std::unique_ptr<double[]> A(new double[NX * NX]);
+    std::unique_ptr<double[]> Anew(new double[NX * NX]);
+
+    initialize(A, NX);
+    initialize(Anew, NX);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    double* curA = A.get();
+    double* prevA = Anew.get();
+
+    #pragma acc data copyin(error, prevA[0:NX * NX], curA[0:NX * NX])
+    {
+        while (iter < ITER_MAX && error > EPS) {
+            #pragma acc parallel loop independent collapse(2) present(curA, prevA)
+            for (size_t i = 1; i < NX - 1; ++i) {
+                for (size_t j = 1; j < NX - 1; ++j) {
+                    curA[i * NX + j] = 0.25 * (prevA[i * NX + j + 1] + prevA[i * NX + j - 1] 
+                                     + prevA[(i - 1) * NX + j] + prevA[(i + 1) * NX + j]);
                 }
             }
-            
-            // Swap pointers instead of copying data
-            // #pragma acc parallel loop collapse(2) present(A, Anew)
-            // for (int i = 1; i <= ny; i++) {
-            //     for (int j = 1; j <= nx; j++) {
-            //         A[i*(nx + 2) + j] = Anew[i*(nx + 2) + j];
-            //     }
-            // }    
-        }
 
-        std::swap(A, Anew);
-        
-        // if (iter % 100 == 0) {
-        //     printf("Iteration %d, error = %0.6f\n", iter, error);
-        // }
-        
-        iter++;
+            if ((iter + 1) % 10000 == 0 || profile_mode) {
+                error = 0.0;
+                #pragma acc update device(error)
+                #pragma acc parallel loop independent collapse(2) reduction(max:error) present(curA, prevA)
+                for (size_t i = 1; i < NX - 1; ++i) {
+                    for (size_t j = 1; j < NX - 1; ++j) {
+                        error = fmax(error, fabs(curA[i * NX + j] - prevA[i * NX + j]));
+                    }
+                }
+                #pragma acc update self(error)
+                
+                if (!profile_mode) {
+                    std::cout << "Итерация: " << iter + 1 << " ошибка: " << error << std::endl;
+                }
+            }
+
+            std::swap(prevA, curA);
+            ++iter;
+        }
+        #pragma acc update self(curA[0:NX * NX])
     }
-    
-    #pragma acc update self(A[0:(nx+2)*(ny+2)])
-    #pragma acc exit data delete(A[0:(nx+2)*(ny+2)], Anew[0:(nx+2)*(ny+2)])
-    
-    return error;
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    auto timeMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+
+    if (!profile_mode) {
+        std::cout << "Время: " << timeMs << " мс, Ошибка: " << error << ", Итерации: " << iter << std::endl;
+
+        if (NX == 13 || NX == 10) {
+            for (size_t i = 0; i < NX; ++i) {
+                for (size_t j = 0; j < NX; ++j) {
+                    std::cout << A[i * NX + j] << ' ';
+                }
+                std::cout << std::endl;
+            }
+        }
+    }
+
+    saveMatrixToFile(curA, NX, "matrix.txt");
 }
 
-int main(int argc, char *argv[]) {
-    boost::program_options::options_description desc("Heat Equation Solver Options");
+int main(int argc, char const *argv[]) {
+    boost::program_options::options_description desc("Options");
     desc.add_options()
-        ("help", "help message")
-        ("n", boost::program_options::value<int>()->default_value(256), "grid size")
-        ("eps", boost::program_options::value<double>()->default_value(1.0e-6), "precision")
-        ("iter", boost::program_options::value<int>()->default_value(1000000), "max iterations")
-        ("profile", "enable profiling");
-    
+        ("eps", boost::program_options::value<double>()->default_value(1e-6), "Точность")
+        ("nx", boost::program_options::value<int>()->default_value(1024), "Размер матрицы")
+        ("iters", boost::program_options::value<int>()->default_value(1000000), "Количество итераций")
+        ("help", "Help message")
+        ("profile", "Enable profiling");
+
     boost::program_options::variables_map vm;
-    try {
-        boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
-        boost::program_options::notify(vm);
-        
-        if (vm.count("help")) {
-            std::cout << desc << "\n";
-            return 0;
-        }
-        
-        N = vm["n"].as<int>();
-        EPS = vm["eps"].as<double>();
-        ITER_MAX = vm["iter"].as<int>();
-        
-        if (vm.count("profile")) {
-            ITER_MAX = 1000;  // Для профилирования
-            std::cout << "PROFILING MODE\n";
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << "\n";
-        return 1;
+    boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+    boost::program_options::notify(vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        exit(1);
     }
 
-    double *A = new double[(N + 2) * (N + 2)];
-    double *Anew = new double[(N + 2) * (N + 2)];
+    int NX = vm["nx"].as<int>();
+    double EPS = vm["eps"].as<double>();
+    int ITER_MAX = vm["iters"].as<int>();
+    bool profile_mode = vm.count("profile");
 
-    initialize(A, N, N);
-    initialize(Anew, N, N);
+    if (profile_mode) {
+        ITER_MAX = 1000;
+        std::cout << "PROFILING MODE\n";
+    }
 
-    std::cout << "Initial matrix (first 10x10):\n";
-    print_matrix(A, std::min(N, 13), std::min(N, 13));
+    acc_set_device_num(3, acc_device_nvidia);
 
-    auto start = std::chrono::steady_clock::now();
-    double final_error = solve_heat_equation(A, Anew, N, N, EPS, ITER_MAX);
-    auto end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
+    // Установка переменных окружения для профилирования (исправлено с использованием strdup)
+    if (profile_mode) {
+        putenv(strdup("NV_ACC_NOTIFY=1"));
+        putenv(strdup("NV_ACC_PROFILING=1"));
+        putenv(strdup("NV_ACC_TIME=1"));
+    }
 
-    std::cout << "\nFinal results:" << std::endl;
-    std::cout << "Grid size: " << N << " x " << N << std::endl;
-    std::cout << "Iterations: " << (ITER_MAX == 100 ? "PROFILING" : std::to_string(ITER_MAX)) << std::endl;
-    std::cout << "Final error: " << final_error << std::endl;
-    std::cout << "Time elapsed: " << elapsed.count() << " seconds\n" << std::endl;
+    solve_heat_equation(NX, EPS, ITER_MAX, profile_mode);
 
-    print_matrix(A, std::min(N, 13), std::min(N, 13));
-
-    delete[] A;
-    delete[] Anew;
-    
     return 0;
 }

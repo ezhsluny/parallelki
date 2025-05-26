@@ -73,7 +73,7 @@ double solve_heat_equation(double* A, double* Anew, int nx, int ny, double eps, 
             }
         }
         
-        if (iter % 100 == 0) {
+        if (iter % 10 == 0) {
             printf("Iteration %d, error = %0.6f\n", iter, error);
         }
         
