@@ -12,3 +12,5 @@ equations_gpu
 *.dat
 result.txt
 task2/Makefile
+task8/gpu_cub
+matrix.txt
