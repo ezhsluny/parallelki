@@ -17,7 +17,7 @@ $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) $(ACC_FLAGS) $< -o $@ $(LIBS)
 
 run: $(TARGET)
-	./$(TARGET) --n 512 --eps 1e-6 --iter 1000000
+	./$(TARGET) --nx 512 --eps 1e-6 --iters 1000000
 
 clean:
 	rm -f $(TARGET)
