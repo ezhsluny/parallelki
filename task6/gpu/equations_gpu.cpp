@@ -7,7 +7,7 @@
 #include <iomanip>
 #include <chrono>
 #include <openacc.h>
-#include <cstring> // для strdup
+#include <cstring>
 
 void saveMatrixToFile(const double* matrix, int NX, const std::string& filename) {
     std::ofstream outputFile(filename);
@@ -139,7 +139,6 @@ int main(int argc, char const *argv[]) {
 
     acc_set_device_num(3, acc_device_nvidia);
 
-    // Установка переменных окружения для профилирования (исправлено с использованием strdup)
     if (profile_mode) {
         putenv(strdup("NV_ACC_NOTIFY=1"));
         putenv(strdup("NV_ACC_PROFILING=1"));
